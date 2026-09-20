@@ -62,7 +62,7 @@ add_tool = types.Tool(
 # -----------------------------------------
 
 chat = client.chats.create(
-    model="gemini-3.8-flash",
+    model=MODEL,
     config=types.GenerateContentConfig(
         tools=[add_tool]
     )
