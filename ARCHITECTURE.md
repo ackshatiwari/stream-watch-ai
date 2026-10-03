@@ -2,6 +2,11 @@
 
 ## 1. Reference: sites
 
+Prototype-sites = [01646000 ("DIFFICULT RUN NEAR GREAT FALLS, VA"),
+                   01668000 ("RAPPAHANNOCK RIVER NEAR FREDERICKSBURG, VA"),
+                   01638500 ("POTOMAC RIVER AT POINT OF ROCKS, MD")]
+
+
 create table sites (
   site_no            text primary key,              -- USGS site number, e.g. '01646500'
   agency_cd          text not null default 'USGS',
@@ -41,5 +46,19 @@ create table scraped_documents (
   unique (source_url, content_hash)
 );
 
-## Agents
+
+# Auth
+
+Supabase Auth will be used
+
+## Tier 1: anonymous questions
+
+There's no auth here, but this is your biggest cost and abuse surface, because every anonymous question is an LLM call you pay for.
+
+- Per-IP rate limit at the API route, for example 10–20 questions per hour, using Upstash Redis or similar.
+- Global daily spend cap that degrades gracefully: if you hit it, show raw gauge data and charts without the LLM answer.
+
+## Tier 2: accounts, saved rivers, email digest
+
+## Tier 3: teachers, orgs, and people making dashbaords
 
