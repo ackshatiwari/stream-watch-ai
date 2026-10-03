@@ -2,6 +2,7 @@
 
 ## 1. Reference: sites
 
+```
 Prototype-sites = [01646000 ("DIFFICULT RUN NEAR GREAT FALLS, VA"),
                    01668000 ("RAPPAHANNOCK RIVER NEAR FREDERICKSBURG, VA"),
                    01638500 ("POTOMAC RIVER AT POINT OF ROCKS, MD")]
@@ -17,8 +18,11 @@ create table sites (
   active             boolean not null default true
 );
 
+```
+
 ## 2. Recent observations (15-min USGS, parsed NWS forecast points) -- Keep ~90 days. One narrow row per reading.
 
+```
 create table recent_observations (
   site_no       text not null references sites(site_no), -- foreign key relationship to the sites table
   parameter_cd  text not null,                      -- '00060' discharge cfs, '00065' gage height ft
@@ -29,11 +33,11 @@ create table recent_observations (
   captured_at   timestamptz not null default now(),
   primary key (site_no, parameter_cd, source, observed_at)
 );
-
+```
 - Delete data that is older than 90 days
 
 ## 3. Scraped qualitative sources (VDH, DC Water, WSSC, per-basin PDFs)
-
+```
 create table scraped_documents (
   id            bigserial primary key,              -- primary key
   source        text not null,                      -- DC Water (or other appropriate source name)
@@ -45,7 +49,7 @@ create table scraped_documents (
   captured_at   timestamptz not null default now(),
   unique (source_url, content_hash)
 );
-
+```
 
 # Auth
 
