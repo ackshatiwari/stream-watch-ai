@@ -1,5 +1,3 @@
-import datetime
-
 import requests
 
 def get_latest_discharge(gauge_id: str):
@@ -46,9 +44,6 @@ def get_latest_discharge(gauge_id: str):
         "provisional": "P" in latest["qualifiers"],
     }
 
-
-
-import requests
 
 def get_mean_discharge(gauge_id: str, start_date: str = None, end_date: str = None):
     """
@@ -98,10 +93,22 @@ def get_mean_discharge(gauge_id: str, start_date: str = None, end_date: str = No
 
 
 if __name__ == "__main__":
-    # these tests use the Potomac River at Little Falls
+    # these tests use all 9 gauges in a loop
     
-    print(f"Latest Discharge:\n{get_latest_discharge('01646500')}\n")
+    """
+    01646500 --> Potomac River near Wash, DC Little Falls Pump Sta
+    01646000 --> Difficult Run near Great Falls, VA
+    01638500 --> Potomac River at Point of Rocks, MD
+    01644000 --> Goose Creek near Leesburg, VA
+    01643000 --> Monocacy River at Jug Bridge near Frederick, MD
+    01645000 --> Seneca Creek at Dawsonville, MD
+    01649500 --> Northeast Branch Anacostia River at Riverdale, MD
+    01654000 --> Accotink Creek near Annandale, VA
+    01668000 --> Rappahannock River near Fredericksburg, VA
     
-    print(f"Mean Discharge (Latest Day):\n{get_mean_discharge('01646500')}\n")
+    """
     
-    print(f"Mean Discharge (2026-10-01 to 2026-10-09):\n{get_mean_discharge('01646500', '2026-10-01', '2026-10-09')}\n")
+    for gauge in ['01646500', '01646000', '01638500', '01644000', '01643000', '01645000', '01649500', '01654000', '01668000']:
+        print(f"Latest Discharge for {gauge}:\n{get_latest_discharge(gauge)}\n")
+        print(f"Mean Discharge (Latest Day):\n{get_mean_discharge(gauge)}\n")
+        print(f"Mean Discharge (2026-10-01 to 2026-10-09):\n{get_mean_discharge(gauge, '2026-10-01', '2026-10-09')}\n")
