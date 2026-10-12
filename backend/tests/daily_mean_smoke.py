@@ -51,10 +51,14 @@ def get_daily_mean(gauge_id: str, param_id: str, start_date: str = None, end_dat
             unit = series["variable"]["unit"]["unitCode"]
 
             for block in series["values"]:
+
                 for r in block["value"]:
+
                     value = float(r["value"])
+
                     if value == no_data:
                         continue  # skip sensor gaps
+                    
                     means.append({
                         "date": r["dateTime"][:10],
                         "mean": value,
