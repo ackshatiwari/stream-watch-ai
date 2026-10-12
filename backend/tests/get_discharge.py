@@ -63,52 +63,6 @@ def get_latest_data(gauge_id: str, param_id: str):
 
     return most_recent
 
-def get_mean_discharge(gauge_id: str, start_date: str = None, end_date: str = None):
-    """
-    Gets the mean discharge rate based on the provided date range.
-    The latest mean is only available until yesterday, so instantaneous values
-    will be gotten from get_latest_data().
-    """
-
-    url = "https://waterservices.usgs.gov/nwis/dv/"
-    params = {
-        "format": "json",
-        "sites": gauge_id,
-        "parameterCd": "00060",   # discharge
-        "statCd": "00003",        # daily mean
-        "siteStatus": "all",
-    }
-
-    if start_date:
-        params["startDT"] = start_date
-        params["endDT"] = end_date or start_date 
-    elif end_date:
-        params["startDT"] = end_date
-        params["endDT"] = end_date
-
-    res = requests.get(url, params=params, timeout=15)
-    res.raise_for_status()
-
-    time_series = res.json()["value"]["timeSeries"]
-    if not time_series:
-        return None
-
-    series = time_series[0]
-    no_data = float(series["variable"]["noDataValue"])
-
-    results = []
-    for r in series["values"][0]["value"]:
-        value = float(r["value"])
-        if value == no_data:
-            continue  # skip sensor gaps
-        results.append({
-            "date": r["dateTime"][:10],
-            "mean_discharge_cfs": value,
-            "provisional": "P" in r["qualifiers"],
-        })
-
-    return results
-
 
 if __name__ == "__main__":
     # these tests use all 9 gauges in a loop
@@ -127,6 +81,5 @@ if __name__ == "__main__":
     """
     
     for gauge in ['01646500', '01646000', '01638500', '01644000', '01643000', '01645000', '01649500', '01654000', '01668000']:
-        print(f"Most Recent (discharge) values for {gauge}:\n{get_latest_data(gauge, '00060')}\n")
-        print(f"Mean Discharge (Latest Day):\n{get_mean_discharge(gauge)}\n")
-        print(f"Mean Discharge (2026-10-01 to 2026-10-09):\n{get_mean_discharge(gauge, '2026-10-01', '2026-10-09')}\n")
+        for param_id, name in PARAMS.items():
+            print(f"Most Recent {name} values for {gauge}:\n{get_latest_data(gauge, param_id)}\n")
