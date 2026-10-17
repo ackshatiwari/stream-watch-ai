@@ -15,7 +15,7 @@ This guide explains how to turn the prototype functions in `backend/tests/` into
 | Gemini tool calling | `backend/tests/basic_ai_agent_gemini.py` | Toy `add_numbers` tool. It handles only one round of tool calls, runs as a CLI loop, and reads `GEMINI_API_CREDENTIALS` from `tests/.env.test` |
 | API | `backend/app/main.py`, `backend/routers/methods.py` | Only a `/test` hello endpoint |
 | Config | `backend/.env.example` | Uses `GEMINI_API_KEY`, which doesn't match the test's `GEMINI_API_CREDENTIALS` |
-| Dependencies | `backend/requirements.txt` | Missing `google-genai`, `python-dotenv`, `uvicorn`, `pytest`. The file is saved as UTF-16 (see §9) |
+| Dependencies | `backend/requirements.txt` | Missing `google-genai`, `python-dotenv`, `uvicorn`. The file is saved as UTF-16 (see §9) |
 
 Already in good shape: `services/params.py` (`PARAMS`) and `services/gauge_registry.py` (`GAUGE_REGISTRY`). Keep both as the single source of truth.
 
@@ -28,7 +28,6 @@ backend/
 ├── .env                      (local only, git-ignored)  GEMINI_API_KEY=..., GEMINI_MODEL=...
 ├── .env.example              (update)
 ├── requirements.txt          (update, re-save as UTF-8)
-├── pytest.ini                (new)
 ├── app/
 │   └── main.py               (update)
 ├── core/
@@ -38,7 +37,7 @@ backend/
 │   ├── gauge_registry.py     (keep, add 1–2 helpers)
 │   ├── usgs_client.py        (new)   shared HTTP + parsing helpers
 │   ├── observations.py       (new)   latest / daily mean / hourly
-│   └── percentile.py         (new)   reference table + log-probability interpolation
+│   └── get_percentile.py     (new)   reference table + log-probability interpolation
 ├── agent/
 │   ├── __init__.py           (new, empty)
 │   ├── tools.py              (new)   LLM-facing wrappers around services
@@ -50,11 +49,14 @@ backend/
 │   ├── methods.py            (update → data endpoints, or rename to gauges.py)
 │   └── agent.py              (new)   POST /agent/chat
 └── tests/
-    ├── conftest.py           (new)
-    ├── test_percentile.py    (moved unit tests, import from services)
-    ├── test_observations.py  (new, mocked HTTP)
-    ├── test_agent_tools.py   (new, mocked services)
-    ├── smoke/                (move the live-network scripts here)
+    ├── unit_tests/           offline, mocked HTTP, fast
+    │   ├── datum_comparison_to_other_data_unittest.py  (moved, import from services.get_percentile)
+    │   ├── test_observations.py   (new, mocked fetch_json)
+    │   └── test_agent_tools.py    (new, mocked services)
+    ├── smoke_tests/          hit the live USGS API
+    │   ├── get_discharge.py                     (moved, import from services.observations)
+    │   ├── daily_mean_smoke.py                  (moved, import from services.observations)
+    │   └── seven_day_iv_hourly_data_smoke.py    (moved, import from services.observations)
     └── basic_ai_agent_gemini.py  (delete once the real agent works, or keep as a scratch file)
 ```
 
@@ -68,7 +70,7 @@ backend/
 
 - Start the server with `uvicorn app.main:app --reload` from the `backend/` folder.
 - Delete every `sys.path.insert(...)` line in the tests.
-- Add `pytest.ini` in `backend/` with a `[pytest]` section containing `pythonpath = .` and `testpaths = tests`, plus a `markers` entry for `live` (network tests).
+- Run tests from `backend/` with `python -m` (for example `python -m tests.smoke_tests.get_discharge`), which puts `backend/` on the import path. `python tests/smoke_tests/get_discharge.py` won't find `services`.
 
 ---
 
@@ -79,7 +81,6 @@ Add these lines, pinned to whatever versions you install:
 - `google-genai` (the current Google Gen AI SDK, imported as `from google import genai`. Don't use the old `google-generativeai` package.)
 - `python-dotenv`
 - `uvicorn[standard]`
-- `pytest` (you can put it in a separate `requirements-dev.txt` instead)
 - Optional: `slowapi` for per-IP rate limiting (your ARCHITECTURE.md Tier 1 asks for it)
 
 Install into the existing `backend/venv`. Right now it only has `fastapi` and its dependencies.
@@ -148,7 +149,7 @@ Move the three fetchers here and rewrite them to use the helpers.
 - For each param, compute: first and last hour, latest mean, min (with its hour), max (with its hour), overall mean, number of hours with data, and a simple trend label ("rising"/"falling"/"steady"). Get the trend by comparing the average of the last 6 hours with the 6 hours before that, using a small percent threshold.
 - This keeps a 7-day query to a few hundred tokens instead of thousands. The frontend chart still uses the full `get_hourly_data` output through the REST endpoint.
 
-### 3.4 `services/percentile.py` (new)
+### 3.4 `services/get_percentile.py` (new)
 Move everything above the "Unit tests on synthetic data" banner from `tests/datum_comparison_to_other_data_unittest.py` into this file: `PERCENTILE_COLUMNS`, `STANDARD_NORMAL`, `get_reference_table`, `compare_datum_to_reference`, `get_todays_percentile`. The math is correct and tested, so leave it as it is.
 
 Changes:
@@ -166,13 +167,21 @@ Changes:
 
 ## 4. Move and fix the tests
 
-| Old file | New file | What to do |
+Tests are split into two folders: `tests/unit_tests/` (offline, every USGS call mocked, safe to run any time) and `tests/smoke_tests/` (calls the real USGS API, so run it only when you want to check live data). The files are already moved. The table says what still needs to change inside each one.
+
+| File | Folder | What to do |
 |---|---|---|
-| `datum_comparison_to_other_data_unittest.py` | `tests/test_percentile.py` | Keep only the synthetic data and the `TestCase` classes. Import the functions from `services.percentile`. Change the `@patch("requests.get")` targets to whatever the service now calls (for example `services.usgs_client.fetch_text`). Clear the `lru_cache` in `setUp` (call `.cache_clear()` on the cached function). |
-| `get_discharge.py`, `daily_mean_smoke.py`, `seven_day_iv_hourly_data_smoke.py` | `tests/smoke/` | Turn each into a `test_*` function marked `@pytest.mark.live` that imports from `services.observations`. Run them with `pytest -m live` only when you want to hit USGS. |
-| (none) | `tests/test_observations.py` | Mock `fetch_json` to return a small hand-made USGS JSON payload. Test the no-data sentinel skipping, the newest-across-series selection, `LookupError` when empty, and registry validation (for example Goose Creek + `00010` → `ValueError`). |
-| (none) | `tests/test_agent_tools.py` | Mock the service functions. Assert each tool returns `{"error": ...}` instead of raising, and that output stays small (summary, not raw series). |
-| `basic_ai_agent_gemini.py` | delete later | Once `/agent/chat` works, this is superseded. |
+| `datum_comparison_to_other_data_unittest.py` | `tests/unit_tests/` | Delete the copied functions and `PERCENTILE_COLUMNS`/`STANDARD_NORMAL` above the "Unit tests on synthetic data" banner, and import them from `services.get_percentile` instead. Keep the synthetic data and the `TestCase` classes. The tests that mock the HTTP call currently patch `requests.get`, which the service no longer calls directly. Change them to patch `services.get_percentile.fetch_text` and return `SYNTHETIC_RDB` as a plain string, not a `MagicMock`. Add a `setUp` to `TestStep1ReferenceTable` and `TestLogProbabilityInterpolation` that calls `fetch_stat_rows.cache_clear()`, or a mocked response stays cached and leaks into other tests. Add one test for the empty-response case (`fetch_text` returns `""` → `LookupError`). |
+| `get_discharge.py` | `tests/smoke_tests/` | Delete the copied `get_latest_data` and import it from `services.observations`. Keep the `__main__` loop over the 9 gauges, but loop over each gauge's own `params` from `GAUGE_REGISTRY` instead of all of `PARAMS`, and wrap each call in `try/except` that prints the error. Unreported params now raise `ValueError` before any USGS call. |
+| `daily_mean_smoke.py` | `tests/smoke_tests/` | Same idea: import `get_daily_mean` from `services.observations`, loop over `GAUGE_REGISTRY` params, and print errors. The service raises `LookupError` instead of printing and returning `None`. |
+| `seven_day_iv_hourly_data_smoke.py` | `tests/smoke_tests/` | Import `get_hourly_data` and `summarize_hourly` from `services.observations`. Keep the existing print of the last 5 hours, and also print the `summarize_hourly` output so you can see what the agent will receive. |
+| `test_observations.py` (new) | `tests/unit_tests/` | Write a `unittest.TestCase` that patches `services.observations.fetch_json` with a small hand-made USGS JSON payload. Write the payload once at the top as a helper that builds one `timeSeries` entry (`sourceInfo.siteName`, `variable.variableCode`, `variable.unit.unitCode`, `variable.noDataValue = -999999`, and `values[0].value` as a list of `{value, qualifiers, dateTime}`). Test: (1) `get_latest_data` skips a trailing `-999999` reading; (2) with two series for the same param, it returns the newer reading; (3) an empty `timeSeries` raises `LookupError`; (4) Goose Creek (`01644000`) + `00010` raises `ValueError` and `fetch_json` is never called; (5) `get_daily_mean` raises `ValueError` for a bad date string, start after end, and a range over 366 days; (6) `get_hourly_data` clamps `days=30` to `P7D` (check the params passed to the mock); (7) `summarize_hourly` returns the right min/max/latest and "rising"/"falling"/"steady"/"not enough data" for hand-made hourly lists. |
+| `test_agent_tools.py` (new) | `tests/unit_tests/` | Write this after step 5.2, since it tests `agent/tools.py`. Patch the service functions where the tools module imports them (for example `agent.tools.get_latest_data`, not `services.observations.get_latest_data`). Test: (1) each tool returns its service's result on success; (2) when the service raises `ValueError`, `LookupError` or `requests.RequestException`, the tool returns `{"error": "..."}` and doesn't raise; (3) `get_daily_means` converts `""` dates to `None`, and returns a summary instead of every row when the service returns more than ~31 rows; (4) `get_recent_trend` returns the `summarize_hourly` shape, not the raw hourly list; (5) every function in `AGENT_TOOLS` has a docstring and type hints on all parameters, since Gemini builds the tool schema from them. |
+| `basic_ai_agent_gemini.py` | `tests/` | Delete it once `/agent/chat` works, since the real agent replaces it. |
+
+**Running them** (from `backend/` with the venv active):
+- All unit tests: `python -m unittest discover -s tests/unit_tests -p "*test*.py"`. The `-p` pattern is needed because the default only matches files starting with `test`, which would skip `datum_comparison_to_other_data_unittest.py`.
+- One smoke test: `python -m tests.smoke_tests.get_discharge` (or `daily_mean_smoke`, `seven_day_iv_hourly_data_smoke`).
 
 Also add `__pycache__/` to `.gitignore` and untrack the committed `.pyc` files (`git rm -r --cached backend/services/__pycache__ backend/tests/__pycache__`).
 
@@ -202,7 +211,7 @@ Tools to write:
 2. **`get_latest_reading(gauge_id: str, param_id: str)`** wraps `observations.get_latest_data`.
 3. **`get_daily_means(gauge_id: str, param_id: str, start_date: str = "", end_date: str = "")`** wraps `observations.get_daily_mean`, converting `""` to `None`. If more than ~31 rows come back, return the first and last few rows plus min/max/mean instead of every row.
 4. **`get_recent_trend(gauge_id: str, param_id: str, days: int = 2)`** calls `get_hourly_data` for one param, then `summarize_hourly`.
-5. **`get_current_percentile(gauge_id: str, param_id: str)`** wraps `percentile.get_current_percentile`. This answers "is the river high or low for this time of year?"
+5. **`get_current_percentile(gauge_id: str, param_id: str)`** wraps `get_percentile.get_current_percentile`. This answers "is the river high or low for this time of year?"
 
 At the bottom, define `AGENT_TOOLS = [list_gauges, get_latest_reading, get_daily_means, get_recent_trend, get_current_percentile]`.
 
@@ -288,8 +297,8 @@ In `frontend/`:
 
 1. In `backend/`, activate the venv and `pip install -r requirements.txt`.
 2. Put `GEMINI_API_KEY` and `GEMINI_MODEL` in `backend/.env`.
-3. Run `pytest` from `backend/`. The unit tests (percentile, observations, tools) should pass offline.
-4. Run `pytest -m live` to confirm the services still work against real USGS data.
+3. Run `python -m unittest discover -s tests/unit_tests -p "*test*.py"` from `backend/`. The unit tests (percentile, observations, tools) should pass offline.
+4. Run the scripts in `tests/smoke_tests/` (for example `python -m tests.smoke_tests.get_discharge`) to confirm the services still work against real USGS data.
 5. Run `uvicorn app.main:app --reload` from `backend/` and open `http://localhost:8000/docs`.
 6. Try the data endpoints in `/docs` first, for example `GET /gauges/01646500/latest?param_id=00060`.
 7. Try `POST /agent/chat` with these questions, and check `tool_calls` in each response:
