@@ -1,17 +1,12 @@
 import math
-import sys
 import unittest
 from datetime import date
-from pathlib import Path
 from statistics import NormalDist
 from unittest.mock import MagicMock, patch
 
 import requests
 
-# put the repo root on the path so `backend` resolves when this file is run directly
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from backend.services.params import PARAMS
+from services.params import PARAMS
 
 # percentile classes offered by USGS (https://waterdata.usgs.gov/statistics-documentation/),
 # mapped from their daily statistics column to their percentile as a decimal

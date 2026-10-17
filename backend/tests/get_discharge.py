@@ -1,12 +1,6 @@
-import sys
-from pathlib import Path
-
 import requests
 
-# put the repo root on the path so `backend` resolves when this file is run directly
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from backend.services.params import PARAMS
+from services.params import PARAMS
 
 
 

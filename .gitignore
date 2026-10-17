@@ -47,3 +47,4 @@ next-env.d.ts
 # backend
 backend/tests/.env.test
 backend/venv/
+**/__pycache__/
